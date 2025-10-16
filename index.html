@@ -5,9 +5,8 @@
   <meta name="viewport" content="initial-scale=1.0, user-scalable=no">
   <meta charset="utf-8">
   <link rel="shortcut icon" href="http://0.gravatar.com/blavatar/638ca867de63809451d948e204e8a8f3?s=16">
-  <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
-  <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet" />
-  <script src="https://unpkg.com/protomaps-themes-base@latest/dist/index.js"></script>
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+  <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
   <style type="text/css">
     html, body, #map {
         height: 100%;
@@ -104,18 +103,7 @@
     // Initialize MapLibre GL map with Protomaps
     const map = new maplibregl.Map({
       container: 'map',
-      style: {
-        version: 8,
-        glyphs: 'https://cdn.protomaps.com/fonts/pbf/{fontstack}/{range}.pbf',
-        sources: {
-          protomaps: {
-            type: 'vector',
-            url: `https://api.protomaps.com/tiles/v3.json?key=${PROTOMAPS_API_KEY}`,
-            attribution: '<a href="https://protomaps.com">Protomaps</a> © <a href="https://openstreetmap.org">OpenStreetMap</a>'
-          }
-        },
-        layers: protomaps_themes_base.default('protomaps', 'white')
-      },
+      style: `https://api.protomaps.com/styles/v2/white.json?key=${PROTOMAPS_API_KEY}`,
       center: [-122.281295, 37.839087],
       zoom: 11
     });
