@@ -5,9 +5,9 @@
   <meta name="viewport" content="initial-scale=1.0, user-scalable=no">
   <meta charset="utf-8">
   <link rel="shortcut icon" href="http://0.gravatar.com/blavatar/638ca867de63809451d948e204e8a8f3?s=16">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://unpkg.com/protomaps-leaflet@latest/dist/protomaps-leaflet.min.js"></script>
+  <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
+  <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet" />
+  <script src="https://unpkg.com/protomaps-themes-base@latest/dist/index.js"></script>
   <style type="text/css">
     html, body, #map {
         height: 100%;
@@ -65,6 +65,9 @@
       overflow-y: auto;
       z-index: 1000;
     }
+    .maplibregl-popup-content {
+      max-width: 250px;
+    }
   </style>
 </head>
 
@@ -93,50 +96,35 @@
   </header>
   
   <script>
-    const PROTOMAPS_API_KEY = 'YOUR_PROTOMAPS_API_KEY_HERE';
+    const PROTOMAPS_API_KEY = 'ffc24a4325d458ce';
     
     const yearLayers = {};
-    let currentLayer = null;
+    let currentYear = null;
     
-    const map = L.map('map', {
-      center: [37.839087, -122.281295],
-      zoom: 11,
-      zoomControl: true
-    });
-    
-    // Add Protomaps basemap with white theme
-    const protomapsLayer = protomaps.leafletLayer({
-      url: `https://api.protomaps.com/tiles/v3/{z}/{x}/{y}.mvt?key=${PROTOMAPS_API_KEY}`,
-      theme: 'white'
-    });
-    protomapsLayer.addTo(map);
-    
-    // Style for GeoJSON features
-    function defaultStyle(feature) {
-      return {
-        color: '#F84F40',
-        weight: 2,
-        opacity: 0.8,
-        fillOpacity: 0.3
-      };
-    }
-    
-    // Popup handler
-    function onEachFeature(feature, layer) {
-      if (feature.properties) {
-        let popupContent = '<div style="max-width: 200px;">';
-        for (let key in feature.properties) {
-          if (feature.properties[key]) {
-            popupContent += `<strong>${key}:</strong> ${feature.properties[key]}<br>`;
+    // Initialize MapLibre GL map with Protomaps
+    const map = new maplibregl.Map({
+      container: 'map',
+      style: {
+        version: 8,
+        glyphs: 'https://cdn.protomaps.com/fonts/pbf/{fontstack}/{range}.pbf',
+        sources: {
+          protomaps: {
+            type: 'vector',
+            url: `https://api.protomaps.com/tiles/v3.json?key=${PROTOMAPS_API_KEY}`,
+            attribution: '<a href="https://protomaps.com">Protomaps</a> © <a href="https://openstreetmap.org">OpenStreetMap</a>'
           }
-        }
-        popupContent += '</div>';
-        layer.bindPopup(popupContent);
-      }
-    }
+        },
+        layers: protomaps_themes_base.default('protomaps', 'white')
+      },
+      center: [-122.281295, 37.839087],
+      zoom: 11
+    });
+    
+    // Add navigation controls
+    map.addControl(new maplibregl.NavigationControl());
     
     // Load GeoJSON for a specific year
-    async function loadYear(year) {
+    async function loadYearData(year) {
       if (yearLayers[year]) {
         return yearLayers[year];
       }
@@ -147,34 +135,73 @@
           throw new Error(`Failed to load ${year}.geojson`);
         }
         const data = await response.json();
-        
-        const layer = L.geoJSON(data, {
-          style: defaultStyle,
-          onEachFeature: onEachFeature
-        });
-        
-        yearLayers[year] = layer;
-        return layer;
+        yearLayers[year] = data;
+        return data;
       } catch (error) {
         console.error(`Error loading ${year}.geojson:`, error);
         return null;
       }
     }
     
+    // Remove current year layer from map
+    function removeCurrentLayer() {
+      if (currentYear && map.getSource(`year-${currentYear}`)) {
+        if (map.getLayer(`year-${currentYear}-fill`)) {
+          map.removeLayer(`year-${currentYear}-fill`);
+        }
+        if (map.getLayer(`year-${currentYear}-line`)) {
+          map.removeLayer(`year-${currentYear}-line`);
+        }
+        map.removeSource(`year-${currentYear}`);
+      }
+    }
+    
     // Select and display a specific year
     async function selectYear(year, zoom, lat, lon) {
-      // Remove current layer if exists
-      if (currentLayer) {
-        map.removeLayer(currentLayer);
-      }
+      // Load the GeoJSON data
+      const data = await loadYearData(year);
+      if (!data) return;
       
-      // Load and add new layer
-      const layer = await loadYear(year);
-      if (layer) {
-        layer.addTo(map);
-        currentLayer = layer;
-        map.setView([lat, lon], zoom);
-      }
+      // Remove previous layer
+      removeCurrentLayer();
+      
+      // Add new source
+      map.addSource(`year-${year}`, {
+        type: 'geojson',
+        data: data
+      });
+      
+      // Add fill layer
+      map.addLayer({
+        id: `year-${year}-fill`,
+        type: 'fill',
+        source: `year-${year}`,
+        paint: {
+          'fill-color': '#F84F40',
+          'fill-opacity': 0.3
+        }
+      });
+      
+      // Add line layer
+      map.addLayer({
+        id: `year-${year}-line`,
+        type: 'line',
+        source: `year-${year}`,
+        paint: {
+          'line-color': '#F84F40',
+          'line-width': 2,
+          'line-opacity': 0.8
+        }
+      });
+      
+      currentYear = year;
+      
+      // Fly to location
+      map.flyTo({
+        center: [lon, lat],
+        zoom: zoom,
+        duration: 1000
+      });
       
       // Update button selection
       document.querySelectorAll('.button').forEach(btn => {
@@ -184,6 +211,48 @@
       
       return false;
     }
+    
+    // Handle clicks on features to show popups
+    map.on('click', (e) => {
+      if (!currentYear) return;
+      
+      const features = map.queryRenderedFeatures(e.point, {
+        layers: [`year-${currentYear}-fill`]
+      });
+      
+      if (features.length > 0) {
+        const feature = features[0];
+        let popupContent = '<div>';
+        
+        for (let key in feature.properties) {
+          if (feature.properties[key]) {
+            popupContent += `<strong>${key}:</strong> ${feature.properties[key]}<br>`;
+          }
+        }
+        popupContent += '</div>';
+        
+        new maplibregl.Popup()
+          .setLngLat(e.lngLat)
+          .setHTML(popupContent)
+          .addTo(map);
+      }
+    });
+    
+    // Change cursor on hover
+    map.on('mouseenter', (e) => {
+      if (currentYear && map.getLayer(`year-${currentYear}-fill`)) {
+        const features = map.queryRenderedFeatures(e.point, {
+          layers: [`year-${currentYear}-fill`]
+        });
+        if (features.length > 0) {
+          map.getCanvas().style.cursor = 'pointer';
+        }
+      }
+    });
+    
+    map.on('mouseleave', () => {
+      map.getCanvas().style.cursor = '';
+    });
     
     // Add click handlers to year buttons
     document.querySelectorAll('.button').forEach(button => {
@@ -202,8 +271,8 @@
       });
     });
     
-    // Load initial year (1820)
-    window.addEventListener('load', () => {
+    // Load initial year after map loads
+    map.on('load', () => {
       selectYear('1820', 11, 37.839, -122.281);
     });
   </script>
