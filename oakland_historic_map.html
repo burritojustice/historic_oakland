@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Historic Oakland, from 1820 to 2015</title>
+  <meta name="viewport" content="initial-scale=1.0, user-scalable=no">
+  <meta charset="utf-8">
+  <link rel="shortcut icon" href="http://0.gravatar.com/blavatar/638ca867de63809451d948e204e8a8f3?s=16">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/protomaps-leaflet@latest/dist/protomaps-leaflet.min.js"></script>
+  <style type="text/css">
+    html, body, #map {
+        height: 100%;
+        padding: 0;
+        margin: 0;
+      }
+    #menu { 
+      position: absolute; 
+      bottom: 50px; 
+      left: 10px; 
+      width: 80px; 
+      height: 330px; 
+      background: transparent; 
+      z-index: 1000;
+    }
+    #menu a { 
+      margin: 5px 10px 0 0;
+      float: left;
+      vertical-align: baseline;
+      width: 40px;
+      padding: 6px;
+      text-align: center;
+      font: bold 14px "Helvetica", Arial;
+      line-height: normal;
+      color: #555;
+      border-radius: 4px;
+      border: 1px solid #777777;
+      background: #ffffff;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    #menu a.selected,
+    #menu a:hover { 
+      color: #F84F40;  
+    }
+    .container .text-muted {
+      margin: 15px 30px;
+    }
+    .header > .container {
+      padding-right: 15px;
+      padding-left: 15px;
+    }
+    .header {
+      position: absolute;
+      top: 0;
+      width: 100%;
+      height: 60px;
+      font: 12px "Helvetica", Arial;
+      background-color: #f5f5f5;
+      opacity: .9;
+      text-align: center;
+      vertical-align: middle;
+      text-shadow: 1px 1px #FFF;
+      display: table-cell;
+      overflow-y: auto;
+      z-index: 1000;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="map"></div>
+  
+  <div id='menu'>
+    <a href="#1820" id="1820" class="button">1820</a> 
+    <a href="#1842" id="1842" class="button">1842</a> 
+    <a href="#1853" id="1853" class="button">1853</a> 
+    <a href="#1869" id="1869" class="button">1869</a> 
+    <a href="#1877" id="1877" class="button">1877</a> 
+    <a href="#1889" id="1889" class="button">1889</a> 
+    <a href="#1903" id="1903" class="button">1903</a> 
+    <a href="#1911" id="1911" class="button">1911</a>      
+    <a href="#1951" id="1951" class="button">1951</a>      
+  </div>
+  
+  <header class="header">
+    <div class="container">
+      <p align="center" class="text-muted">
+        For many centuries, this place belonged to the Ohlone people—until the Spanish arrived and told them that it didn't.<br>
+        These maps track what happened after: Hover or click on red items to learn the many ways this land was claimed, named, and divided over the last 200 years.
+      </p>
+    </div>
+  </header>
+  
+  <script>
+    const PROTOMAPS_API_KEY = 'YOUR_PROTOMAPS_API_KEY_HERE';
+    
+    const yearLayers = {};
+    let currentLayer = null;
+    
+    const map = L.map('map', {
+      center: [37.839087, -122.281295],
+      zoom: 11,
+      zoomControl: true
+    });
+    
+    // Add Protomaps basemap with white theme
+    const protomapsLayer = protomaps.leafletLayer({
+      url: `https://api.protomaps.com/tiles/v3/{z}/{x}/{y}.mvt?key=${PROTOMAPS_API_KEY}`,
+      theme: 'white'
+    });
+    protomapsLayer.addTo(map);
+    
+    // Style for GeoJSON features
+    function defaultStyle(feature) {
+      return {
+        color: '#F84F40',
+        weight: 2,
+        opacity: 0.8,
+        fillOpacity: 0.3
+      };
+    }
+    
+    // Popup handler
+    function onEachFeature(feature, layer) {
+      if (feature.properties) {
+        let popupContent = '<div style="max-width: 200px;">';
+        for (let key in feature.properties) {
+          if (feature.properties[key]) {
+            popupContent += `<strong>${key}:</strong> ${feature.properties[key]}<br>`;
+          }
+        }
+        popupContent += '</div>';
+        layer.bindPopup(popupContent);
+      }
+    }
+    
+    // Load GeoJSON for a specific year
+    async function loadYear(year) {
+      if (yearLayers[year]) {
+        return yearLayers[year];
+      }
+      
+      try {
+        const response = await fetch(`${year}.geojson`);
+        if (!response.ok) {
+          throw new Error(`Failed to load ${year}.geojson`);
+        }
+        const data = await response.json();
+        
+        const layer = L.geoJSON(data, {
+          style: defaultStyle,
+          onEachFeature: onEachFeature
+        });
+        
+        yearLayers[year] = layer;
+        return layer;
+      } catch (error) {
+        console.error(`Error loading ${year}.geojson:`, error);
+        return null;
+      }
+    }
+    
+    // Select and display a specific year
+    async function selectYear(year, zoom, lat, lon) {
+      // Remove current layer if exists
+      if (currentLayer) {
+        map.removeLayer(currentLayer);
+      }
+      
+      // Load and add new layer
+      const layer = await loadYear(year);
+      if (layer) {
+        layer.addTo(map);
+        currentLayer = layer;
+        map.setView([lat, lon], zoom);
+      }
+      
+      // Update button selection
+      document.querySelectorAll('.button').forEach(btn => {
+        btn.classList.remove('selected');
+      });
+      document.getElementById(year).classList.add('selected');
+      
+      return false;
+    }
+    
+    // Add click handlers to year buttons
+    document.querySelectorAll('.button').forEach(button => {
+      button.addEventListener('click', function(e) {
+        e.preventDefault();
+        const year = this.id;
+        let zoom = 11;
+        
+        // Set appropriate zoom levels for different years
+        if (year === '1820' || year === '1842') zoom = 11;
+        else if (year === '1853') zoom = 13;
+        else if (year === '1869') zoom = 16;
+        else zoom = 18;
+        
+        selectYear(year, zoom, 37.839, -122.281);
+      });
+    });
+    
+    // Load initial year (1820)
+    window.addEventListener('load', () => {
+      selectYear('1820', 11, 37.839, -122.281);
+    });
+  </script>
+</body>
+</html>
